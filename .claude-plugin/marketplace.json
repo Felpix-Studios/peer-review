@@ -1,0 +1,17 @@
+{
+  "name": "felpix-research",
+  "owner": {
+    "name": "Felpix"
+  },
+  "metadata": {
+    "description": "Adversarial peer-review tooling for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "peer-review",
+      "source": "./",
+      "description": "35 specialized agents and 1 skill orchestrating a Red Team / Blue Team / Assessor cascade to peer-review academic paper PDFs. Invoke via /peer-review.",
+      "version": "1.0.0"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "peer-review",
+  "version": "1.0.0",
+  "description": "Adversarial multi-agent peer review of academic paper PDFs.",
+  "author": {
+    "name": "Kevin Li"
+  }
+}
