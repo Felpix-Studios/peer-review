@@ -11,7 +11,8 @@ in an academic text. Inputs (passed by the orchestrator): the PDF, a
 plain-text dump of the PDF (with `[Page N]` markers — **prefer the dump for
 scanning, quote verification, and long-form reading; `Read` PDF pages only
 when visual layout matters for tables, figures, or equations**), the
-**citation**, and the **list of potential issues**.
+**citation**, the **list of potential issues**, and **optionally a parsed
+`.bib` file** (`bib_entries.json`) when the user supplied one at run start.
 
 ## YOUR ROLE
 
@@ -93,3 +94,59 @@ REASON: [One sentence]
 2. You may NOT flag judgment calls or interpretive claims.
 3. If you are uncertain whether a detail is invented, check if you could
    verify it by ctrl+F in the PDF — if not, it's invented.
+
+## BIBLIOGRAPHY VALIDATION (when `.bib` is provided)
+
+If the orchestrator passed `bib_entries.json`, perform a SECOND pass after
+the Black Box check above. The .bib is a verified ground truth: any cited
+reference in the dossier should have a matching entry, and any year/title
+mismatch is a real defect the author should fix before submission.
+
+### Schema
+
+`bib_entries.json` is a JSON array of objects. Each entry has:
+
+```
+{ "key": "smith2024", "year": "2024", "authors": ["Smith, John"],
+  "title": "Some title", "venue": "...", "type": "article", "raw": "..." }
+```
+
+### Procedure
+
+For every external reference cited in the dossier (or in the PDF text the
+dossier critiques), in author-year form like "Smith (2024)":
+
+1. **Look up the entry** in `bib_entries.json` by author surname + year.
+   Match liberally: case-insensitive surname, fuzzy year (allow ±0 — the
+   year must match exactly, but variants like "2024a" / "2024b" are OK).
+2. **No matching entry → MAJOR issue.** Output:
+   ```
+   ISSUE: Citation not found in .bib: Smith (2024)
+   INVENTED DETAIL: cited reference "Smith (2024)"
+   PDF SAYS: <quote the relevant passage>
+   BIB SAYS: no entry with surname "Smith" and year 2024
+   HALLUCINATION RISK: HIGH
+   REASON: Cited reference is absent from the bibliography. Either the
+       reference exists but the .bib is incomplete, or the citation is
+       broken. Author should fix before submission.
+   ---
+   ```
+3. **Matching entry exists, but year disagrees with what the PDF/dossier
+   says** (e.g. PDF text says "Smith's 2018 paper" but .bib has 2024) →
+   MAJOR issue. Quote both.
+4. **Matching entry exists, but title disagrees** (the dossier or PDF
+   summarizes the cited paper's title and the words clearly do not
+   correspond — not a paraphrase mismatch but a genuinely different title)
+   → MAJOR issue. Quote both.
+5. **Match confirmed** → no output for that reference (silence is success).
+
+### Scope guards (bibliography pass)
+
+- **Do not** flag stylistic differences (initials vs full first names,
+  `&` vs `and`, abbreviated vs full journal name).
+- **Do not** flag entries that are present in the .bib but uncited in the
+  paper — that is the author's `\nocite{*}` choice, not a defect.
+- **Do not** invent cited references that are not actually in the dossier
+  or PDF — work only from references the paper actually cites.
+- If `bib_entries.json` is missing or empty, skip this section entirely
+  and report only the Black Box findings.

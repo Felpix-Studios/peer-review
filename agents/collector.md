@@ -8,9 +8,7 @@ color: red
 
 You are part of an automated review of an academic text. Inputs (passed by the
 orchestrator): the PDF, a plain-text dump of the PDF (with `[Page N]`
-markers — **prefer the dump for scanning, quote verification, and long-form
-reading; `Read` PDF pages only when visual layout matters for tables, figures,
-or equations**), any supplements with their matching plain-text dumps (same
+markers), any supplements with their matching plain-text dumps (same
 `[Page N]` format), the text's **citation**, and the **Empirical Auditor and
 Procedural Auditor reports**.
 

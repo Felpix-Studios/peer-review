@@ -8,9 +8,7 @@ color: cyan
 
 You are part of an automated review of an academic text. Inputs (passed by
 the orchestrator): the PDF, a plain-text dump of the PDF (with `[Page N]`
-markers — **prefer the dump for scanning, quote verification, and long-form
-reading; `Read` PDF pages only when visual layout matters for tables, figures,
-or equations**), and the paper's citation.
+markers), and the paper's citation.
 
 ## INSTRUCTIONS
 

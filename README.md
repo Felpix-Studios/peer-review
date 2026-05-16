@@ -25,10 +25,10 @@ Use Claude Code to add the marketplace and install the plugin.
 The plugin extracts PDFs to plain text once per run (so a 15-agent pipeline doesn't re-render the same pages 15 times as images). This requires **Python 3.10+** on `PATH` as `python` and the `pypdf` package.
 
 ```bash
-pip install pypdf reportlab
+pip install pypdf reportlab bibtexparser
 ```
 
-`reportlab` is optional — it's only used by the `compile-code-to-pdf.py` helper when you want to pack a replication-code directory into a single dense PDF for the code-audit agents. Installing both now avoids a second failure later if you enable the code audit.
+`reportlab` is optional — it's only used by the `compile-code-to-pdf.py` helper when you want to pack a replication-code directory into a single dense PDF for the code-audit agents. `bibtexparser` is optional — it's only used by the `parse-bib.py` helper if you supply a `.bib` file at run start (the citation-checker uses it to verify cited references against your bibliography). The plugin's regex `.bib` parser handles common entries without `bibtexparser`; install it if your bibliography uses unusual concatenations or escape sequences. Installing all three now avoids a second failure later.
 
 > **Preflight check.** If Python or `pypdf` is missing when you run `/peer-review`, the skill halts at preflight and prints the install command — nothing is extracted, no agent is invoked, no directory is created.
 
@@ -60,9 +60,10 @@ The final report is written to `./peer-review-report.md` (top of your cwd). If `
 | Python (>= 3.10) on `PATH` as `python` | PDF text extraction (every run) | [python.org](https://www.python.org/) |
 | `pypdf` | PDF text extraction (every run) | `pip install pypdf` |
 | `reportlab` (optional) | `compile-code-to-pdf.py` helper for code-audit runs | `pip install reportlab` |
+| `bibtexparser` (optional) | `parse-bib.py` helper for citation validation when a `.bib` is supplied | `pip install bibtexparser` |
 | `pandoc` (optional) | PDF export of the final report | `brew install pandoc` (macOS) / `apt install pandoc` |
 | LaTeX distribution with `xelatex` (optional) | PDF export of the final report | [MacTeX](https://tug.org/mactex/) / [TeX Live](https://tug.org/texlive/) / [MiKTeX](https://miktex.org/) |
-| Access to Claude Opus + Sonnet | 30 agents use Opus; 5 use Sonnet | Claude Code plan |
+| Access to Claude Opus + Sonnet | 26 agents use Opus; 9 use Sonnet | Claude Code plan |
 
 ## How It Works
 
@@ -88,106 +89,13 @@ Conditional branches (driven by your answers to the follow-up questions):
 
 ## What's Included
 
-<details>
-<summary><strong>35 agents, 1 skill, 5 shared prompt fragments, 3 helper scripts</strong> (click to expand)</summary>
+**35 specialized agents** (26 Opus + 9 Sonnet), **1 skill** (`/peer-review`), **6 shared prompt fragments**, and **4 helper scripts**.
 
-### Skill
+The agents split across seven role groups: Red Team adversarial critics, math-audit chain, code-audit chain, setup/synthesis, cross-verification, writing/finalization, and writer-mode (author-facing) editing. Each agent is independently usable via `@<agent-name>`; the full pipeline runs them through a verification cascade orchestrated by `/peer-review`.
 
-| Skill | What It Does |
-|-------|-------------|
-| `/peer-review` | Orchestrate the full Red Team → Blue Team → Assessor → Reviewer cascade on an academic paper PDF |
+The canonical per-agent breakdown — name, role, model, stage filename it writes, conditional flags, and where it sits in the pipeline — lives in `skills/peer-review/SKILL.md` under the "Run README" file table. To find it, open SKILL.md and search for `paper_text.txt`; the table begins on the next line. The prompt-fragment injection mapping (which agents receive which shared fragment) is in the same file under "Fragment → agent mapping". When agents are added or renamed, only SKILL.md needs updating — this README does not.
 
-### Agents — Red Team (adversarial critique)
-
-| Agent | What It Does |
-|-------|-------------|
-| `foundations-critic` | Interrogates theoretical foundations and research design |
-| `foundations-critic-round-2` | Second foundations pass for non-empirical papers; finds issues Round 1 missed |
-| `empirical-auditor` | Dissects empirical machinery: design, measures, analytical decisions, effect-size interpretation |
-| `procedural-auditor` | Verifies the paper actually did what it claimed, based only on documented evidence |
-| `collector` | Returns to flagged locations and exhaustively collects overlooked details (footnotes, table notes, supplements) |
-| `omissions-auditor` | Discovers what the paper *doesn't* say: unmeasured confounds, missing robustness checks, alternative explanations |
-
-### Agents — Math audit
-
-| Agent | What It Does |
-|-------|-------------|
-| `math-page-identifier` | Locate PDF pages containing equations, proofs, or derivations |
-| `math-error-finder` | Lightweight sweep: arithmetic, table totals, calibration numbers (always on unless the paper has no math) |
-| `re-deriver` | Independently re-derive proofs from first definitions |
-| `math-proofreader` | Check text-equation consistency |
-| `math-auditor` | Framework-level audit of the mathematical approach |
-| `math-verifier` | Sift math findings and keep only the verified issues |
-
-### Agents — Code audit
-
-| Agent | What It Does |
-|-------|-------------|
-| `paper-code-auditor` | Find paper-code gaps |
-| `bug-hunter` | Find bugs in the replication code |
-| `data-construction-auditor` | Find errors in the data pipeline |
-| `code-verifier` | Verify code issues from the three hunters |
-| `code-list-compiler` | Compile the final code issue list |
-| `data-editor` | Write the code/data analysis paragraph for the review |
-
-### Agents — Setup and synthesis
-
-| Agent | What It Does |
-|-------|-------------|
-| `metadata-extractor` | Pull citation, document type, empirical/theoretical flag, algebra flag, page structure |
-| `contributions-extractor` | Extract the paper's claimed contributions in descending order of importance |
-| `red-team-summarizer` | Deduplicate and consolidate Red Team findings |
-| `number-checker` | Verify load-bearing numbers; filter prohibited visual-evidence issues |
-| `blue-team` | Write honest defenses for every issue; classify A-G (mistake, acknowledged, clerical, structural, visual, feature, other) |
-| `assessor` | Adjudicate Red vs Blue per issue |
-| `dossier-builder` | Build the preliminary and final verified issue dossier |
-
-### Agents — Cross-verification
-
-| Agent | What It Does |
-|-------|-------------|
-| `fact-checker` | Verify quotes, page references, and figure/table citations against the PDF |
-| `citation-checker` | Audit external-source attributes for hallucinated references |
-
-### Agents — Writing and finalization
-
-| Agent | What It Does |
-|-------|-------------|
-| `reviewer` | Write the integrated narrative review in the voice of a rigorous, fair, epistemically humble senior peer reviewer — impervious to prestige and politics, focused on research design and logic over narrative |
-| `review-reviser` | Apply fact-check corrections to the draft review |
-| `legal-sanitizer` | Scan for defamatory phrasing across four red lines |
-| `formatter` | Enforce final structure, citation format, sentence-case labels, and inline-LaTeX math |
-
-### Agents — Writer mode (author-facing)
-
-| Agent | What It Does |
-|-------|-------------|
-| `revision-strategist` | Write the author-facing revision strategy plus secret copyeditor instructions |
-| `editor-polisher` | Polish the final Editor's Note |
-| `paper-proofreader` | Typo/grammar/punctuation list for the paper itself |
-| `copyeditor` | Concrete revision suggestions implementing the revision-strategist's strategy |
-
-### Shared prompt fragments
-
-Single source of truth for cross-agent guardrails. The orchestrator reads each once and injects the text inline into every applicable sub-agent's task prompt — agent files do not contain this content.
-
-| Fragment | Injected Into |
-|----------|-------------|
-| `hallucination-guards.md` | Every agent that reads the paper |
-| `issue-types.md` | Blue Team, Assessor, Dossier Builder |
-| `output-format.md` | Reviewer, Review Reviser, Dossier Builder, Formatter |
-| `voice-and-tone.md` | Reviewer, Copyeditor, and author-facing agents |
-| `page-reference.md` | Every PDF-reading agent that cites page numbers |
-
-### Helper scripts
-
-| Script | What It Does |
-|--------|-------------|
-| `extract-pdf-text.py` | Extract page-marked plain text from a PDF (requires `pypdf`). Called once per run. |
-| `compile-code-to-pdf.py` | Pack a replication-code directory into a single dense PDF (requires `reportlab`). Optional. |
-| `render-pdf.sh` | Convert the final `peer-review-report.md` to PDF via `pandoc` + `xelatex`, then clean up LaTeX intermediates. Gracefully skips if either tool is missing. |
-
-</details>
+Helper scripts live in `scripts/`: `extract-pdf-text.py` (PDF → text, one call per run), `compile-code-to-pdf.py` (replication directory → single PDF, called when code-audit is on), `parse-bib.py` (`.bib` → JSON for citation validation, called when a `.bib` is supplied), and `render-pdf.sh` (Markdown report → PDF via pandoc + xelatex, called at the end of every run).
 
 ## Limitations
 

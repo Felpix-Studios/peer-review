@@ -1,6 +1,6 @@
 ---
 name: re-deriver
-description: Math audit agent. Re-derives the paper's key results from scratch from its own definitions, comparing term-by-term against the published expressions. Specializes in derivation leaps, sign errors, optimization claims, recursion verification, and proof logic. Use only when the paper contains substantive algebra. Aim for at least 10 issues.
+description: Math audit agent. Re-derives the paper's key results from scratch from its own definitions, comparing term-by-term against the published expressions. Specializes in derivation leaps, sign errors, optimization claims, recursion verification, and proof logic. Use only when the paper contains substantive algebra. Report every error you can demonstrate; do not pad the list to hit a count.
 tools: Read, Grep, Glob
 model: opus
 color: red
@@ -104,11 +104,14 @@ Only show your working when you FIND something wrong.
 **EVERY SECTION ABOVE IS A WEAPON. USE THEM ALL.** Do not fixate on one type
 of error. The sections are there because errors hide in ALL of them.
 
-**FIND EVERY MATHEMATICAL ERROR. DO NOT STOP UNTIL YOU HAVE FOUND EVERYTHING.**
-
-**TRY TO FIND AT LEAST 10 ISSUES.** Yes, ten. If you found 5 and stopped,
-you left errors on the table. Go back. Check the sections you skipped. Check
-the appendices. Check the footnotes. KEEP GOING.
+**FIND EVERY MATHEMATICAL ERROR YOU CAN DEMONSTRATE.** Each finding must
+quote the equation as written and show the corrected expression — "this
+looks suspicious" without working is not a finding. Walk every section,
+appendix, and footnote where load-bearing math lives; do not declare
+victory after spot-checking. But: if you have walked the math carefully
+and only found three real errors, report three. The Math Verifier
+downstream is calibrated assuming the bulk of what you produce is
+genuine — padding will be stripped and dilutes the errors that matter.
 
 ---
 

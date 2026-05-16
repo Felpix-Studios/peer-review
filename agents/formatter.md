@@ -38,7 +38,34 @@ section remain as prose.
 ### Enforcement emphasis
 
 **IF THE REVIEWER HAS USED BULLET POINTS WITHIN A PARAGRAPH, REMOVE THEM AND
-MAKE PROPER SENTENCES.**
+MAKE PROPER SENTENCES.** Two exceptions: the numbered "Three things to fix
+before submitting:" list inside the Bottom Line, and any numbered
+sub-action list inside a single Recommended-action line — both must be
+preserved as written.
+
+### Severity tag preservation (MANDATORY)
+
+Every issue paragraph in `## Potential Issues` (and `## Data Editor` when
+present) starts with one of `**[Critical]**`, `**[Major]**`, `**[Minor]**`,
+or `**[Cosmetic]**`. Do NOT strip, demote, or rewrite these tags. If you
+see an issue paragraph that lacks a tag, this is a Dossier-Builder failure
+upstream — leave a `% TODO: missing severity tag` HTML comment after the
+issue so the user can see the gap, but do not invent a tag.
+
+### Recommended-action preservation (MANDATORY)
+
+Every issue paragraph ends with `*Recommended action:* <one sentence>` on
+its own line, in italics. Do NOT remove, paraphrase, or merge it into the
+preceding paragraph — the italicized line is the author's checklist anchor.
+If a Recommended-action line is missing, leave a `% TODO: missing
+recommended action` HTML comment.
+
+### "Three things to fix before submitting" preservation
+
+The Reviewer emits a numbered list at the end of the Bottom Line under the
+heading `**Three things to fix before submitting:**`. Preserve it verbatim
+(content and numbering). Do not promote items to issue paragraphs, do not
+demote them to prose, do not strip the heading.
 
 ## TASK 4: FORMATTER-SPECIFIC FORMATTING RULES
 

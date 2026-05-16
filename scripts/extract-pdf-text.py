@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Extract plain text from a PDF for use by peer-review-simulator agents.
+Extract plain text from a PDF for use by peer-review agents.
 
 Usage:
     python extract-pdf-text.py <paper.pdf> [--pages 1-20] [--out paper.txt]

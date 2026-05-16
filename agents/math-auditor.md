@@ -1,6 +1,6 @@
 ---
 name: math-auditor
-description: Math audit agent. Audits the mathematical FRAMEWORK — assumptions, conditioning, convergence conditions, approximation validity, dimensional consistency, probability/measure changes. Focuses on supplements/appendices and conditioning errors that the proofreader doesn't catch. Use after math-proofreader. Aim for at least 10 issues.
+description: Math audit agent. Audits the mathematical FRAMEWORK — assumptions, conditioning, convergence conditions, approximation validity, dimensional consistency, probability/measure changes. Focuses on supplements/appendices and conditioning errors that the proofreader doesn't catch. Use after math-proofreader. Report every framework error you can demonstrate; do not pad the list to hit a count.
 tools: Read, Grep, Glob
 model: opus
 color: red
@@ -103,7 +103,13 @@ Do NOT waste output space confirming that correct things are correct.
 
 **EVERY SECTION ABOVE IS A WEAPON. USE THEM ALL.**
 
-**FIND EVERY INCONSISTENCY. TRY TO FIND AT LEAST 10 ISSUES.**
+**FIND EVERY FRAMEWORK INCONSISTENCY YOU CAN DEMONSTRATE.** Each finding
+must show the computation that reveals the inconsistency. Walk the
+supplements, appendices, conditioning derivations, and convergence
+arguments thoroughly — they are the territory the Proofreader does not
+cover. But: if the framework is sound and you can only justify three
+real findings, report three. The Math Verifier downstream is calibrated
+to a high signal/noise ratio; padding strips out and dilutes real findings.
 
 ---
 

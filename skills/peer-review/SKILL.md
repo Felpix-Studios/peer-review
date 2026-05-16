@@ -21,14 +21,30 @@ The user's invoking message is free-form prose — there are no flags to parse. 
 
 **Run this check first — before asking the user any questions, before creating any directory, before invoking any agent.** If it fails, stop the pipeline and tell the user what to install.
 
-Run this single `Bash` command:
+### Pick a Python interpreter (`PY_BIN`)
+
+Probe `python` first; if it is missing, fall back to `python3`. Record which one resolved as **`PY_BIN`** and reuse it for every later script invocation in this skill.
 
 ```bash
-python -c "import sys; print('PY_OK' if sys.version_info >= (3, 10) else 'PY_OLD'); import importlib.util; print('PYPDF_OK' if importlib.util.find_spec('pypdf') else 'PYPDF_MISSING')" 2>&1
+if command -v python >/dev/null 2>&1; then PY_BIN=python
+elif command -v python3 >/dev/null 2>&1; then PY_BIN=python3
+else PY_BIN=""
+fi
+echo "PY_BIN=${PY_BIN:-MISSING}"
+```
+
+If the result is `PY_BIN=MISSING`, neither interpreter is on `PATH`. Stop and print the install message in the next subsection.
+
+### Verify version + `pypdf`
+
+Using the resolved `PY_BIN`:
+
+```bash
+"$PY_BIN" -c "import sys; print('PY_OK' if sys.version_info >= (3, 10) else 'PY_OLD'); import importlib.util; print('PYPDF_OK' if importlib.util.find_spec('pypdf') else 'PYPDF_MISSING')" 2>&1
 ```
 
 Possible failures:
-- **`python: command not found`** (or any shell error) → Python is missing or not on `PATH` as `python`. (If the user only has `python3`, that is also a failure — STEP 1a invokes `python` directly.)
+- **`PY_BIN=MISSING`** → neither `python` nor `python3` is on `PATH`.
 - **`PY_OLD`** → Python is older than 3.10. The helper scripts use PEP 604 `str | None` syntax and require 3.10+.
 - **`PYPDF_MISSING`** → the `pypdf` package is not importable. Required for the PDF text extraction at STEP 1a.
 
@@ -36,15 +52,35 @@ If any check fails, do NOT proceed — do not call `AskUserQuestion`, do not cre
 
 > **Cannot start peer-review — missing dependency.**
 >
-> This plugin needs **Python 3.10+** with **`pypdf`** installed. Please install the required packages and then re-run `/peer-review`:
+> This plugin needs **Python 3.10+** with **`pypdf`** installed (and `bibtexparser` if you plan to pass a `.bib` file at STEP 0). Please install the required packages and then re-run `/peer-review`:
 >
 > ```bash
-> pip install pypdf reportlab
+> pip install pypdf reportlab bibtexparser
 > ```
 >
-> (`reportlab` is only used by the optional `compile-code-to-pdf.py` helper for the code audit, but installing both now avoids a second failure later.)
+> (`reportlab` is only used by the optional `compile-code-to-pdf.py` helper for the code audit; `bibtexparser` is only used if you supply a `.bib` file. Installing them now avoids a second failure later.)
 
-Only if the command returns `PY_OK` and `PYPDF_OK`, continue.
+Only if `PY_BIN` is non-empty and the command returns `PY_OK` and `PYPDF_OK`, continue. Hold `PY_BIN` in memory for the rest of the run; every later `Bash` invocation that calls `extract-pdf-text.py`, `compile-code-to-pdf.py`, or `parse-bib.py` MUST use `"$PY_BIN" <script>` rather than the literal word `python`.
+
+### Conditional check: `reportlab` for code audit
+
+After Q2 is answered in STEP 0b — and only if the user picked **"Yes — I have a replication directory"** — run an additional check before continuing past STEP 0:
+
+```bash
+"$PY_BIN" -c "import importlib.util; print('REPORTLAB_OK' if importlib.util.find_spec('reportlab') else 'REPORTLAB_MISSING')"
+```
+
+If it prints `REPORTLAB_MISSING`, stop and print:
+
+> **Cannot run the code audit — `reportlab` is not installed.**
+>
+> The code audit packs your replication directory into a single PDF using `reportlab`. Install it and re-run, or re-invoke `/peer-review` and pick **"No replication code"** at the code-audit prompt:
+>
+> ```bash
+> pip install reportlab
+> ```
+
+Catching this here means the user does not lose the 10–30 minutes of work that runs before the code audit triggers in STEP 2.
 
 ### Advisory: PDF export tooling (non-blocking)
 
@@ -76,7 +112,7 @@ If no PDF can be identified, ask the user in plain text for the path. **Do not p
 
 ### 0b. Collect options (single AskUserQuestion call)
 
-Call `AskUserQuestion` **once** with these four bundled questions (follow the tool's 1–4 questions / 2–4 options constraint):
+Call `AskUserQuestion` **once** with these bundled questions (follow the tool's 1–4 questions / 2–4 options constraint — split into two batched calls if you exceed four).
 
 ```
 Q1 — header: "Math audit"
@@ -101,14 +137,23 @@ Q3 — header: "Writer mode"
 Q4 — header: "Supp PDFs"
   - "None (Recommended)" — main PDF only.
   - "Yes — I will list them" — add supplementary PDFs.
+
+Q5 — header: "Venue tier"
+  - "Working paper / dissertation chapter (Recommended)" — early-stage
+    work, calibrate severity to "is this defensible at a workshop".
+  - "Field journal" — e.g. AEJ, AJPS, JCB, JCR, J. Memory & Lang.
+  - "Top-tier general journal" — e.g. AER, QJE, Nature, Science, PNAS.
+  - "Conference" — e.g. NeurIPS, ICML, CHI, ACL, FAccT.
 ```
 
-All four questions are single-select (`multiSelect: false`). The user can always override any choice via the auto-provided "Other" free-text option.
+All questions are single-select (`multiSelect: false`). The user can always override any choice via the auto-provided "Other" free-text option. AskUserQuestion accepts at most four questions per call — bundle Q1–Q4 in the first call and Q5 in a second call (or whatever split lands under the limit).
 
 ### 0c. Follow-up prompts for free-form input
 
 - If Q2 = "Yes", ask in plain text: *"What's the path to the replication code directory?"* Save as `code_dir`.
 - If Q4 = "Yes", ask in plain text: *"List the supplementary PDF paths (one per line)."* Save as `supplements` (array).
+- Always ask in plain text: *"One-word discipline (e.g. econ, CS, biology, medicine, psychology, sociology, history, physics, …)? Hit Enter to skip."* Save as `discipline` (lowercase string, or `None` if blank).
+- Always ask in plain text: *"Path to a .bib file for citation validation? (Hit Enter to skip — the citation-checker still runs without it; the .bib just lets it verify cited author/year/title against your bibliography.)"* Save as `bib_path` (absolute path or `None`).
 - If the user's opening message already contained an explicit citation (e.g. *"cite this as Smith (2024)..."*), capture it as `citation_override`. Otherwise leave blank — metadata-extractor will supply the citation.
 
 ### 0d. Derive defaults
@@ -120,24 +165,193 @@ All four questions are single-select (`multiSelect: false`). The user can always
 - `is_math` = one of `auto | force | skip` (from Q1)
 - `run_code_audit` = boolean (from Q2)
 - `writer_mode` = boolean (from Q3, default true)
+- `venue_tier` = one of `working-paper | field-journal | top-tier | conference` (from Q5; default `working-paper`)
+- `discipline` = lowercase string from 0c (default `None`)
+- `bib_path` = absolute path to a `.bib` file or `None` (from 0c)
+- `bib_entries_path` = `<work_dir>/bib_entries.json` if `bib_path` is set; otherwise `None`
 
-### 0e. Prepare workspace
+### 0e. Prepare workspace and persist options
 
 ```bash
 mkdir -p <work_dir>
 ```
 
+Then write the canonical options dict to `<work_dir>/options.json`. This is the single source of truth for "what was the cache built against" — it drives invalidation in 0f.
+
+```json
+{
+  "is_math": "auto | force | skip",
+  "run_code_audit": true | false,
+  "writer_mode": true | false,
+  "venue_tier": "working-paper | field-journal | top-tier | conference",
+  "discipline": "<string or null>",
+  "supplements": ["<absolute path>", "..."],
+  "code_dir": "<absolute path or null>",
+  "bib_path": "<absolute path or null>",
+  "citation_override": "<string or null>",
+  "schema_version": 2
+}
+```
+
+`schema_version` exists so future plumbing changes can invalidate the entire cache cleanly (bump the integer; the comparison at 0f will treat any mismatch as a complete invalidation).
+
 Tell the user in one line what's about to happen and quote the work-dir path so they can resume later:
 
 > "Starting peer-review. Intermediate outputs cached in `./peer-review-output/<slug>/` — a visible folder in your current directory. Re-invoke with the same PDF to resume from cached stages. Final report will be written to `./peer-review-report.md`."
 
-### 0f. Resumability check
+### 0f. Resumability check + cache invalidation
 
 Each downstream stage writes its output to `<work_dir>/<stage>.txt`. Before invoking any agent, check whether its cached output file exists:
 - If yes → skip the agent, read the cached file.
 - If no → invoke the agent, `Write` its output to the cached path, continue.
 
-To re-run a single stage, the user deletes its file (and any downstream files) and re-invokes `/peer-review` with the same PDF.
+**Before** that lookup, do the invalidation pass — otherwise resumed runs silently re-use stage files that are stale relative to the current options.
+
+#### Step 1: detect option drift
+
+If `<work_dir>/options.json` already exists from a prior run, load it as `prev_options` and diff against the current options dict (`curr_options`, computed at 0d). For every key whose value differs, look it up in the **option-impact map** below and unlink (delete) every listed cached stage file. Then unlink everything that depends on those deleted stages via the **stage-dependency graph** below (transitive closure).
+
+If `schema_version` differs, treat it as a full invalidation: delete every `*.txt`, `*.json` file in `<work_dir>` except the (still-valid) `paper_text.txt` and any `supp_*_text.txt` whose corresponding supplement path is unchanged.
+
+After the invalidation pass, overwrite `<work_dir>/options.json` with the current options.
+
+#### Step 2: option-impact map
+
+```
+is_math (changed)        → 01e_math.txt, 01fa_math_check.txt,
+                           01fb_math_proofread.txt, 01fc_math_audit.txt,
+                           01fd_math_sober.txt, math_pages.txt
+run_code_audit (changed) → code_bundle.pdf, 01h_code_gonzo.txt,
+                           01i_code_gonzo_b.txt, 01j_code_gonzo_c.txt,
+                           01k_code_compiler.txt, 01l_code_checker.txt,
+                           01m_code_list.txt, 04b_data_editor.txt
+writer_mode (changed)    → 08a_alchemist.txt, 08b_polisher.txt,
+                           08c_alchemist_instructions.txt,
+                           09a_proofread.txt, 09b_copyedit.txt
+venue_tier (changed)     → 01a_breaker.txt, 01a_2_breaker_revisit.txt,
+                           01b_butcher.txt, 01c_shredder.txt,
+                           01d_collector.txt, 01g_the_void.txt,
+                           02c_blue_team.txt, 02e_assessment.txt,
+                           02g_list_v1.txt, 03c_list_v2.txt,
+                           04a_reviewer.txt, 05c_reviser.txt,
+                           06_legal.txt, 07_formatter.txt,
+                           08a_alchemist.txt, 08b_polisher.txt,
+                           09b_copyedit.txt
+discipline (changed)     → same as venue_tier
+supplements (changed)    → all Red Team outputs that read supplements:
+                           01a_breaker.txt, 01a_2_breaker_revisit.txt,
+                           01b_butcher.txt, 01c_shredder.txt,
+                           01g_the_void.txt
+code_dir (changed)       → all run_code_audit files (above)
+bib_path (changed)       → 03b_external.txt
+citation_override (changed) → 00b_metadata.json plus everything downstream
+                              of metadata (effectively a full invalidation)
+```
+
+#### Step 3: stage-dependency graph (transitive closure)
+
+When a file is invalidated, every file listed below as depending on it is also invalidated. Apply transitively until no more invalidations cascade.
+
+```
+00a_metadata.txt          → 00b_metadata.json, 00c_contributions.txt, every downstream stage
+00b_metadata.json         → every downstream stage
+00c_contributions.txt     → 01a_breaker.txt, 01a_2_breaker_revisit.txt, 01b_butcher.txt, 01g_the_void.txt, 01n_summarizer.txt, 04a_reviewer.txt
+math_pages.txt            → 01e_math.txt, 01fa_math_check.txt, 01fb_math_proofread.txt, 01fc_math_audit.txt, 01fd_math_sober.txt
+01a_breaker.txt           → 01a_2_breaker_revisit.txt, 01n_summarizer.txt
+01a_2_breaker_revisit.txt → 01n_summarizer.txt
+01b_butcher.txt           → 01d_collector.txt, 01n_summarizer.txt
+01c_shredder.txt          → 01d_collector.txt, 01n_summarizer.txt
+01d_collector.txt         → 01n_summarizer.txt
+01e_math.txt              → 01n_summarizer.txt
+01g_the_void.txt          → 01n_summarizer.txt
+01fa_math_check.txt       → 01fd_math_sober.txt
+01fb_math_proofread.txt   → 01fc_math_audit.txt, 01fd_math_sober.txt
+01fc_math_audit.txt       → 01fd_math_sober.txt
+01fd_math_sober.txt       → 01n_summarizer.txt
+01h_code_gonzo.txt        → 01k_code_compiler.txt
+01i_code_gonzo_b.txt      → 01k_code_compiler.txt
+01j_code_gonzo_c.txt      → 01k_code_compiler.txt
+01k_code_compiler.txt     → 01l_code_checker.txt, 01m_code_list.txt
+01l_code_checker.txt      → 01m_code_list.txt
+01m_code_list.txt         → 01n_summarizer.txt, 04b_data_editor.txt
+01n_summarizer.txt        → 02a_numbers.txt, 02b_compiler_1.txt, …, 02g_list_v1.txt, 03a_checker_1.txt, 03b_external.txt, 03c_list_v2.txt, 04a_reviewer.txt, 05a_checker_2.txt, 05b_checker_3.txt, 05c_reviser.txt, 06_legal.txt, 07_formatter.txt
+02a_numbers.txt           → 02b_compiler_1.txt and everything below
+02b_compiler_1.txt        → 02c_blue_team.txt and below
+02c_blue_team.txt         → 02d_compiler_2.txt and below
+02d_compiler_2.txt        → 02e_assessment.txt and below
+02e_assessment.txt        → 02f_compiler_3.txt and below
+02f_compiler_3.txt        → 02g_list_v1.txt and below
+02g_list_v1.txt           → 03a_checker_1.txt, 03b_external.txt, 03c_list_v2.txt, 04a_reviewer.txt and below
+03a_checker_1.txt         → 03c_list_v2.txt and below
+03b_external.txt          → 03c_list_v2.txt and below
+03c_list_v2.txt           → 04a_reviewer.txt and below
+04a_reviewer.txt          → 05a_checker_2.txt, 05b_checker_3.txt, 05c_reviser.txt, 06_legal.txt, 07_formatter.txt
+04b_data_editor.txt       → 06_legal.txt, 07_formatter.txt
+05a_checker_2.txt         → 05c_reviser.txt and below
+05b_checker_3.txt         → 05c_reviser.txt and below
+05c_reviser.txt           → 06_legal.txt, 07_formatter.txt
+06_legal.txt              → 07_formatter.txt
+07_formatter.txt          → 08a_alchemist.txt, 09b_copyedit.txt (writer mode)
+08a_alchemist.txt         → 08b_polisher.txt, 08c_alchemist_instructions.txt
+08c_alchemist_instructions.txt → 09b_copyedit.txt
+09a_proofread.txt         → (terminal — no downstream)
+```
+
+The graph is data, not narrative — encode it in-memory as a dict and walk it once per invalidation.
+
+#### Step 4: manual deletion
+
+If the user manually deletes a stage file between runs (the documented way to force a single stage to re-run), the orchestrator MUST run the same Step 3 cascade on the next invocation: detect missing files, treat them as if they had just been invalidated, and unlink every downstream file in the dependency graph. This is what makes the `delete-and-rerun` workflow safe.
+
+To re-run a single stage, the user deletes its file and re-invokes `/peer-review` with the same PDF — the orchestrator handles the downstream cascade automatically.
+
+### 0g. Pre-flight cost & time estimate
+
+Before STEP 1a fires (which kicks off the first agent and burns tokens), tell the user what they're about to spend. This is a one-screen text summary and a confirmation pause — the goal is "no surprises 20 minutes in."
+
+Compute the agent count from the resolved options and the (cached or freshly extracted) page count of the PDF. If `paper_text.txt` already exists from a prior run, count its `[Page N]` markers; otherwise estimate from the file size of the PDF (`bytes / 50_000` is a coarse-but-fine page estimate; refine after STEP 1a).
+
+```
+opus_agents  = 5  (foundations-critic, omissions-auditor, blue-team, assessor, reviewer)
+            + 1  (number-checker)
+            + 1  (citation-checker)
+            + 1  (fact-checker × 1 on the dossier)
+            + 2  (fact-checker × 2 on the draft review)
+            + 1  (review-reviser)
+            + 1  (legal-sanitizer)
+            + 1  (formatter)
+            + 1  (dossier-builder × 2 → counts as 2)
+            + 1  (red-team-summarizer)
+
+if is_empirical:           opus_agents += 3   (empirical-auditor, procedural-auditor, collector)
+if not is_empirical:       opus_agents += 1   (foundations-critic-round-2)
+if math_pages != "NONE":   opus_agents += 1   (math-error-finder)
+if run_deep_math_audit:    opus_agents += 4   (re-deriver, math-proofreader, math-auditor, math-verifier)
+if run_code_audit:         opus_agents += 5   (paper-code-auditor, bug-hunter, data-construction-auditor, code-verifier, data-editor)
+                           sonnet_agents += 1 (code-list-compiler)
+if writer_mode:            opus_agents += 3   (revision-strategist, copyeditor, editor-polisher)
+                           sonnet_agents += 1 (paper-proofreader)
+
+sonnet_agents += 3   (metadata-extractor, contributions-extractor, math-page-identifier — always)
+```
+
+Token estimate is rough: assume ~`pages × 2_000` input tokens per Opus agent and ~`3_000` output tokens. The point is order-of-magnitude, not invoice-grade. Use these per-million-token rates as of 2026 unless the user has overridden them: **Opus $15 in / $75 out, Sonnet $3 in / $15 out**. If pricing changes, this number is wrong by a constant factor — that's acceptable for a "should I bail?" check.
+
+Print this block to the user (substitute real numbers; keep it tight):
+
+> **About to start peer-review**
+>
+> - Paper: ~`<N>` pages
+> - Agents: `<opus_agents>` Opus + `<sonnet_agents>` Sonnet (= `<total>` total)
+> - Optional chains: math = `<auto/force/skip>`, code = `<on/off>`, writer-mode = `<on/off>`, supplements = `<count>`, .bib = `<yes/no>`
+> - Estimated wall time: **~`<low>`–`<high>` min** (rough — depends on Anthropic load and parallelism)
+> - Estimated token cost: **~$`<low>`–$`<high>`** at 2026 list pricing
+>
+> If this looks reasonable, no action needed — extraction starts now. To back out, hit Ctrl-C; nothing has been spent yet.
+
+Pick the `low`/`high` band as ±50% of the central estimate — it signals the imprecision honestly. If the user has resumed an interrupted run (i.e. several stage files are already cached), subtract their share from both the agent count and the cost estimate, and label the line "Estimated remaining cost".
+
+This block is informational. Do not call `AskUserQuestion` here — adding another prompt is friction for the common case where the user just wants to proceed. The user can always Ctrl-C before extraction begins.
 
 ## Plugin resources (portable paths)
 
@@ -145,6 +359,7 @@ All plugin-internal paths below use `${CLAUDE_PLUGIN_ROOT}` so sub-agent `Task` 
 
 - **Shared prompt fragments** (single source of truth for cross-agent guardrails; injected inline — see next section):
   - `${CLAUDE_PLUGIN_ROOT}/prompts/hallucination-guards.md`
+  - `${CLAUDE_PLUGIN_ROOT}/prompts/common-directives.md`
   - `${CLAUDE_PLUGIN_ROOT}/prompts/issue-types.md`
   - `${CLAUDE_PLUGIN_ROOT}/prompts/output-format.md`
   - `${CLAUDE_PLUGIN_ROOT}/prompts/voice-and-tone.md`
@@ -155,23 +370,24 @@ All plugin-internal paths below use `${CLAUDE_PLUGIN_ROOT}` so sub-agent `Task` 
 
 ## Prompt fragment injection
 
-The five fragments above are the single source of truth for guardrails that apply across multiple sub-agents. **Agent files do NOT contain this content** — instead, you (the orchestrator) Read each fragment once at the start of the run and inline its text as a preamble to every applicable sub-agent's Task prompt. Do not pass paths.
+The six fragments above are the single source of truth for guardrails that apply across multiple sub-agents. **Agent files do NOT contain this content** — instead, you (the orchestrator) Read each fragment once at the start of the run and inline its text as a preamble to every applicable sub-agent's Task prompt. Do not pass paths.
 
 ### When to read
 
-At the start of STEP 1, before invoking `@metadata-extractor`, `Read` each of the five fragments and hold the text in memory for the rest of the run. Do not re-read per invocation. The `page-reference.md` template is cached raw; its placeholders are filled after STEP 1c (see the STEP 1b / 1c sections below).
+At the start of STEP 1, before invoking `@metadata-extractor`, `Read` each of the six fragments and hold the text in memory for the rest of the run. Do not re-read per invocation. The `page-reference.md` template is cached raw; its placeholders are filled after STEP 1c (see the STEP 1b / 1c sections below).
 
 ### Fragment → agent mapping
 
 | Fragment | Inject into |
 |----------|-------------|
 | `hallucination-guards.md` | foundations-critic, foundations-critic-round-2, empirical-auditor, procedural-auditor, collector, omissions-auditor, math-error-finder, re-deriver, math-proofreader, math-auditor, math-verifier, paper-code-auditor, bug-hunter, data-construction-auditor, code-verifier, code-list-compiler, number-checker, fact-checker, citation-checker, red-team-summarizer, blue-team, assessor, dossier-builder, reviewer |
+| `common-directives.md` | foundations-critic, foundations-critic-round-2, empirical-auditor, procedural-auditor, collector, omissions-auditor, contributions-extractor, blue-team, number-checker, fact-checker, assessor, dossier-builder, reviewer, review-reviser, revision-strategist, copyeditor |
 | `issue-types.md` | blue-team, assessor, dossier-builder |
 | `output-format.md` | reviewer, review-reviser, dossier-builder, formatter |
 | `voice-and-tone.md` | reviewer, review-reviser, formatter, revision-strategist, editor-polisher, copyeditor, dossier-builder, data-editor, code-list-compiler |
 | `page-reference.md` | foundations-critic, foundations-critic-round-2, empirical-auditor, procedural-auditor, collector, omissions-auditor, math-error-finder, re-deriver, math-proofreader, math-auditor, math-verifier, number-checker, fact-checker, citation-checker, blue-team, assessor, dossier-builder, reviewer, review-reviser, revision-strategist, copyeditor, paper-proofreader |
 
-**No injection:** metadata-extractor, contributions-extractor, math-page-identifier, legal-sanitizer, data-editor, editor-polisher, red-team-summarizer, paper-code-auditor, bug-hunter, data-construction-auditor, code-verifier, code-list-compiler (mechanical tasks, code-only stages, or self-contained tasks — fragments do not apply).
+**No injection:** metadata-extractor, math-page-identifier, legal-sanitizer, editor-polisher, paper-code-auditor, bug-hunter, data-construction-auditor, code-verifier (mechanical tasks, code-only stages, or self-contained tasks — fragments do not apply). The agents listed in the mapping table above receive only the fragments they appear under — for example, `data-editor` and `code-list-compiler` get `voice-and-tone.md` only; `red-team-summarizer` gets `hallucination-guards.md` only.
 
 ### Injection format
 
@@ -183,6 +399,9 @@ Prefix each applicable sub-agent's Task prompt with:
 
 ## Hallucination Guards
 <verbatim contents of hallucination-guards.md>
+
+## Common Directives
+<verbatim contents of common-directives.md>
 
 ## Issue Type Classification
 <verbatim contents of issue-types.md>
@@ -204,6 +423,44 @@ Prefix each applicable sub-agent's Task prompt with:
 ```
 
 Include ONLY the fragments listed for that agent in the mapping. Consult the mapping table on every invocation. The `page-reference.md` fragment is the only one with placeholders — every other fragment is injected verbatim.
+
+## Calibration preamble (venue tier + discipline)
+
+In addition to the shared fragments, every **critique-producing agent** receives a one-paragraph "Calibration" preamble derived from `venue_tier` and `discipline` (collected at STEP 0). The point is to scale severity to what a real reader at this venue would expect, without giving the agent license to invent issues.
+
+Inject this preamble — verbatim, with the `{venue_tier}` and `{discipline}` substitutions filled — at the very top of the Task prompt for: `foundations-critic`, `foundations-critic-round-2`, `empirical-auditor`, `procedural-auditor`, `omissions-auditor`, `collector`, `assessor`, `dossier-builder`, `reviewer`, `revision-strategist`, `copyeditor`, `data-editor`. Do NOT inject it into mechanical/verification agents (number-checker, fact-checker, citation-checker, formatter, legal-sanitizer, math-verifier, code-verifier, the proofreaders) — these are calibration-neutral and should not soften or harden their checks based on venue.
+
+Build the preamble from these fragments:
+
+```
+---
+# Calibration
+
+This paper is being assessed against the **{venue_tier_human}** bar.
+{venue_tier_text}
+
+{discipline_line}
+
+Calibration shifts severity, not the rules of evidence. You may not invent
+issues that do not exist at any venue, and you may not suppress real
+findings because they are "minor for this venue".
+---
+```
+
+Where:
+
+| `venue_tier` | `venue_tier_human` | `venue_tier_text` |
+|---|---|---|
+| `working-paper` | "working paper / dissertation chapter" | "Apply a workshop bar: the headline claim should be defensible to an informed colleague, but missing robustness checks, partial literature engagement, and rough exposition are normal at this stage. Major issues are problems that would block submission, not problems that would block acceptance. Do not flag missing items that an author would naturally add during revision (e.g. polished tables, full lit-review coverage, additional sensitivity tests) unless their absence undermines the headline claim itself." |
+| `field-journal` | "field journal" | "Apply a typical field-journal bar (think AEJ, AJPS, JCB, J. Memory & Lang.). Standard robustness checks should be present; identification should be defensible to a methodologically attentive specialist; the literature engagement should cover the immediate prior work in the subfield. Issues that would draw a referee's request for revision count as Major; issues a referee would shrug at count as Minor." |
+| `top-tier` | "top-tier general journal" | "Apply a top-tier-general bar (think AER, QJE, Nature, Science, PNAS). Identification must be airtight or honestly hedged; robustness must be exhaustive; the contribution must be defensible against the strongest counterargument in the broader literature, not just the subfield. Issues that would cost a desk-reject or a Reviewer 2 demolition count as Critical even if a field-journal referee would tolerate them." |
+| `conference` | "conference (e.g. NeurIPS, ICML, CHI, ACL)" | "Apply a top-tier conference bar. Reproducibility (code, hyperparameters, seeds), baseline strength, ablations, and statistical significance of headline numbers must be present. Issues that would cost a meta-reviewer's confidence count as Critical. The bar for novelty is high but the bar for prose polish is lower than a journal." |
+
+`discipline_line` is built as:
+- If `discipline` is a non-empty string: `"The discipline is **{discipline}**. Apply the methodological norms of that field (preferred identification strategies, what counts as a credible robustness check, what evidence the field treats as load-bearing). Do not import standards from other fields where they would be inappropriate (e.g. do not demand RCT-grade identification of an interpretive humanities paper; do not let a quantitative ML paper escape with anecdote)."`
+- If `discipline` is `None`: `"Discipline was not specified. Use general academic norms; do not assume a specific subfield's conventions."`
+
+Do not store the rendered preamble in a stage file — it is computed once per run from the options and injected at agent-invocation time. It changes only when the user re-runs with different `venue_tier` or `discipline` (which will trigger cache invalidation per #7).
 
 ## Paper text dump
 
@@ -246,13 +503,15 @@ Before any agent runs, produce a plain-text dump of the main PDF and of every su
 
 ```bash
 # Main paper
-python ${CLAUDE_PLUGIN_ROOT}/scripts/extract-pdf-text.py \
+"$PY_BIN" ${CLAUDE_PLUGIN_ROOT}/scripts/extract-pdf-text.py \
     "<pdf_path>" --out "<work_dir>/paper_text.txt"
 
 # Each supplement (repeat once per entry in <supplements>)
-python ${CLAUDE_PLUGIN_ROOT}/scripts/extract-pdf-text.py \
+"$PY_BIN" ${CLAUDE_PLUGIN_ROOT}/scripts/extract-pdf-text.py \
     "<supp_path>" --out "<work_dir>/supp_<slug>_text.txt"
 ```
+
+`$PY_BIN` was resolved during the preflight (either `python` or `python3`) — keep using it for every helper-script invocation in this run.
 
 After every extraction, the script prints a summary line to stdout, e.g.:
 
@@ -271,9 +530,9 @@ Populate `pdf_text_path` (main paper) and `supp_text_paths` (a parallel list to 
 - **Scanned / image-only PDF:** on the script's stderr warning ("appears scanned or image-only"), relay the warning verbatim to the user and set that file's text-dump path to `None`. Other supplements continue unaffected.
 - **On success:** log the script's stdout line so the user sees the chars-per-page figure.
 
-### 1b. Read the five prompt fragments
+### 1b. Read the six prompt fragments
 
-Read each of `hallucination-guards.md`, `issue-types.md`, `output-format.md`, `voice-and-tone.md`, and `page-reference.md` from `${CLAUDE_PLUGIN_ROOT}/prompts/` and cache the text in memory. The first four are used verbatim. The `page-reference.md` fragment has two placeholders (`{PAGE_STRUCTURE}`, `{SUPPLEMENT_START_PAGE}`) — hold the raw template here; you will fill the placeholders after STEP 1c once the metadata dict is populated, then use the filled version for every subsequent sub-agent invocation.
+Read each of `hallucination-guards.md`, `common-directives.md`, `issue-types.md`, `output-format.md`, `voice-and-tone.md`, and `page-reference.md` from `${CLAUDE_PLUGIN_ROOT}/prompts/` and cache the text in memory. The first five are used verbatim. The `page-reference.md` fragment has two placeholders (`{PAGE_STRUCTURE}`, `{SUPPLEMENT_START_PAGE}`) — hold the raw template here; you will fill the placeholders after STEP 1c once the metadata dict is populated, then use the filled version for every subsequent sub-agent invocation.
 
 ### 1c. Invoke `@metadata-extractor`
 
@@ -281,7 +540,7 @@ Invoke with the PDF path and `pdf_text_path`. Save output to `00a_metadata.txt`.
 
 If `citation_override` was collected in Step 0c, use that string as the citation in all downstream agent prompts instead of the extracted one.
 
-**Fill the page-reference template** now: substitute `{PAGE_STRUCTURE}` and `{SUPPLEMENT_START_PAGE}` in the cached `page-reference.md` text with the parsed values (fall back to `"NULL — treat the printed page number as whatever appears in the PDF header/footer"` if either metadata field is missing). Use this filled text as the fifth guardrail fragment for all subsequent injections.
+**Fill the page-reference template** now: substitute `{PAGE_STRUCTURE}` and `{SUPPLEMENT_START_PAGE}` in the cached `page-reference.md` text with the parsed values (fall back to `"NULL — treat the printed page number as whatever appears in the PDF header/footer"` if either metadata field is missing). Use this filled text as the sixth guardrail fragment for all subsequent injections.
 
 ### 1d. Write the run README
 
@@ -298,8 +557,11 @@ Rows to include in the table (all possible, filter by flags). If supplements wer
 
 | File | Contents |
 |------|----------|
+| `options.json` | Canonical run-options dict (math/code/writer/venue/supplements/bib). Source of truth for cache invalidation. |
 | `paper_text.txt` | pypdf-extracted text dump of the PDF with `[Page N]` markers |
 | `supp_<slug>_text.txt` × N | Plain-text dump of each supplement `<basename>.pdf` *(only if supplements were provided)* |
+| `bib_entries.json` | Normalized JSON of the user-supplied `.bib` *(only if `bib_path` was provided at STEP 0c)* |
+| `code_bundle.pdf` | Dense single-PDF bundle of the replication code, produced by `compile-code-to-pdf.py`. Quick-scan input for the four code-audit agents *(only if `run_code_audit == true`)* |
 | `00a_metadata.txt` | Paper metadata (citation, doc type, empirical/theoretical, algebra flag, page structure, supplement start page) |
 | `00b_metadata.json` | Parsed canonical metadata dict (field/value pairs with any `citation_override` applied); the downstream-agent source of truth for citation, `IS_EMPIRICAL`, `PAGE_STRUCTURE`, etc. |
 | `00c_contributions.txt` | Claimed contributions in descending order of importance |
@@ -345,23 +607,6 @@ Rows to include in the table (all possible, filter by flags). If supplements wer
 | `09a_proofread.txt` | Paper Proofreader — typo/grammar list for the author (or `No proofreading issues were found.`) *(writer mode)* |
 | `09b_copyedit.txt` | Copyeditor — concrete revision suggestions *(writer mode)* |
 
-### Stage-code numbering
-
-Stage codes are contiguous within each stage — no gaps in the letter sequence. This diverges from the upstream `reviewer2` Gemini pipeline, which has legacy gaps at `01h` (between the paper-audit and code-audit chains) and `09b` (a data-sanitizer stage absorbed into `@paper-proofreader`'s prompt in this port). Claude Code closed those gaps by renumbering the code-audit chain down one letter and the copyeditor down one letter.
-
-When porting behavior changes between the two pipelines, consult this mapping:
-
-| Upstream name | This plugin's name |
-|---------------|--------------------|
-| `01i_code_gonzo.txt` | `01h_code_gonzo.txt` |
-| `01j_code_gonzo_b.txt` | `01i_code_gonzo_b.txt` |
-| `01k_code_gonzo_c.txt` | `01j_code_gonzo_c.txt` |
-| `01l_code_compiler.txt` | `01k_code_compiler.txt` |
-| `01m_code_checker.txt` | `01l_code_checker.txt` |
-| `01n_code_list.txt` | `01m_code_list.txt` |
-| `01o_summarizer.txt` | `01n_summarizer.txt` |
-| `09c_copyedit.txt` | `09b_copyedit.txt` |
-
 ### 1e. Invoke `@contributions-extractor`
 
 Invoke with the PDF, `pdf_text_path`, and the citation. Save output to `00c_contributions.txt`.
@@ -397,6 +642,45 @@ Possible values:
 - `UNKNOWN` — text dump was missing or scanned. Pass this through to math agents; they will fall back to scanning the full PDF themselves.
 
 The `math_pages` value is an explicit input to every math agent (`math-error-finder` in STEP 2, and `re-deriver`/`math-proofreader`/`math-auditor`/`math-verifier` if the deep audit runs). Agents use it to target their multimodal `Read` of PDF pages.
+
+### 1h. Parse `.bib` (if provided)
+
+If `bib_path` is set (the user passed a `.bib` file at 0c), parse it once into a normalized JSON list. The citation-checker reads this in STEP 4 to verify cited author/year/title matches against the actual bibliography rather than only flagging hallucinations within the paper text.
+
+```bash
+"$PY_BIN" ${CLAUDE_PLUGIN_ROOT}/scripts/parse-bib.py \
+    "<bib_path>" --out "<work_dir>/bib_entries.json"
+```
+
+The script prefers `bibtexparser` if installed, falls back to a regex parser otherwise — either path produces the same output schema. Set `bib_entries_path` to the output path on success.
+
+**Failure modes:**
+- **Resumability:** if `bib_entries.json` already exists from a prior run with the same `bib_path` (verified by the cache-invalidation pass at 0f), skip re-parsing.
+- **`.bib` file not found:** the script exits with `".bib file not found: …"`. Warn the user, set `bib_entries_path = None`, and continue without bib validation. Do not halt the pipeline.
+- **0 entries parsed:** the script prints a stderr warning and writes an empty array. Relay the warning to the user and set `bib_entries_path = None` (an empty array is worse than nothing — it would cause every cited reference to look "missing").
+- **`bibtexparser` not installed:** the script automatically falls back to its regex parser. No user-visible failure.
+
+If `bib_path` is `None` (the common default), skip this step entirely. The citation-checker will operate in its existing PDF-only mode.
+
+### 1i. Compile code bundle (if `run_code_audit == true`)
+
+When code-audit is on, produce a single dense PDF of the replication code so the code-audit agents have an alternative quick-scan format to the file-by-file directory exploration they currently do with `Bash`/`Read`/`Grep`. The bundle is **additive**, not a replacement — agents still use the directory for file-specific work; the bundle is for orientation and high-level overview when the directory is large.
+
+```bash
+"$PY_BIN" ${CLAUDE_PLUGIN_ROOT}/scripts/compile-code-to-pdf.py \
+    "<code_dir>" --out "<work_dir>/code_bundle.pdf"
+```
+
+Skip the invocation if `code_bundle.pdf` already exists in the cache (the cache-invalidation pass at 0f handles re-builds when `code_dir` or `run_code_audit` changes). The script honors a 5 MB byte cap by default and skips standard generated/binary directories (`.git`, `node_modules`, `__pycache__`, etc.); if the user's code dir is unusually large, raise the cap with `--max-bytes`.
+
+Pass `code_bundle.pdf` to the four code-audit agents (`paper-code-auditor`, `bug-hunter`, `data-construction-auditor`, `code-verifier`) at STEP 2 as an additional input alongside the existing `code_dir`.
+
+**Failure modes:**
+- **`reportlab` missing:** already gated by the preflight conditional check above; would only fire here if the user disabled the check. The script exits with a clear install message.
+- **Empty code directory:** script exits with `"No code files found."` Warn the user that the code-audit will run without a bundle (agents fall back to direct directory exploration).
+- **Cap reached:** the script prints a stderr message naming the first skipped file; relay it. The bundle contains the prefix that fit; agents must use the directory for the rest.
+
+If `run_code_audit == false`, skip this step entirely.
 
 ## STEP 2 — Red Team (Stage 1)
 
@@ -459,7 +743,7 @@ If `run_code_audit == true`:
 **Every agent in this step that receives the paper also receives `pdf_text_path`** (per the Paper text dump section).
 
 1. Invoke `@fact-checker` with the PDF, `pdf_text_path`, and `02g_list_v1.txt` to identify quote/page-ref errors. Save as `03a_checker_1.txt`.
-2. Invoke `@citation-checker` with the PDF, `pdf_text_path`, and `02g_list_v1.txt` for the external-source hallucination audit. Save as `03b_external.txt`.
+2. Invoke `@citation-checker` with the PDF, `pdf_text_path`, `02g_list_v1.txt`, and — if `bib_entries_path` is non-`None` — the path to `bib_entries.json` plus the directive: *"You also have a parsed bibliography. Use it to verify, for every external source the dossier critiques (author + year + paper title), that an entry exists in the .bib with roughly matching year and roughly matching title (allow whitespace, capitalization, and punctuation differences). If the cited reference is absent from the .bib OR the .bib entry's year or title clearly disagrees with what the dossier says, raise it as a Major issue with the form `Citation mismatch: \"<paper says>\" but .bib has \"<actual>\".`"* Save as `03b_external.txt`.
 3. Invoke `@dossier-builder` again with the PDF, `pdf_text_path`, `02g_list_v1.txt`, plus the fact-check and citation-check outputs to produce the final dossier. Save as `03c_list_v2.txt`.
 
 If `03c_list_v2.txt` is `=NULL=` or shorter than 50 chars, fall back to `02g_list_v1.txt` as the dossier.
@@ -501,57 +785,77 @@ If `writer_mode` is true:
 
 ## STEP 10 — Render the final report
 
-Build the final output file at `<out>`:
+Build the final output file at `<out>`. The report is a YAML-frontmatter
+Markdown document: pandoc reads the frontmatter in STEP 11 to emit a
+standalone title page, a table of contents, and page breaks before the
+author-facing sections.
 
-```
-═══════════════════════════════════════════════════════════════
+Fields to compute once before assembly:
+- `<CITATION>` — from the metadata dict (or `citation_override` if present).
+- `<RUN_DATE>` — today's ISO date (`YYYY-MM-DD`).
 
-                   Claude Code's Peer Review
+Template:
 
-                    <TITLE_AUTHORS>, <YEAR>
+~~~
+---
+title: "Claude Code's Peer Review"
+subtitle: "<CITATION>"
+date: "<RUN_DATE>"
+toc: true
+toc-depth: 1
+geometry: margin=1in
+fontsize: 11pt
+classoption:
+  - titlepage
+header-includes: |
+  \usepackage{amsmath,amssymb,amsthm,mathtools}
+---
 
-═══════════════════════════════════════════════════════════════
+> *This report was generated by an automated peer-review pipeline using
+> large language models. No human editor reviewed it. Treat its findings as
+> hypotheses to verify, not as authoritative judgments.*
 
-<DISCLAIMER paragraph: "This report was generated by an automated peer-review
-pipeline using large language models. No human editor reviewed it. Treat its
-findings as hypotheses to verify, not as authoritative judgments.">
-
-═══════════════════════════════════════════════════════════════
-
-<CITATION>
-
-═══════════════════════════════════════════════════════════════
-
-<contents of 07_formatter.txt>
+<contents of 07_formatter.txt, with every line `^## ` promoted to `# `>
 
 <if writer_mode:>
 
-═══════════════════════════════════════════════════════════════
+\newpage
 
-                       EDITOR'S NOTE TO AUTHOR
-
-═══════════════════════════════════════════════════════════════
+# Editor's Note to Author
 
 <contents of 08b_polisher.txt>
 
-═══════════════════════════════════════════════════════════════
+\newpage
 
-                          COPYEDITING
-
-═══════════════════════════════════════════════════════════════
+# Copyediting
 
 <contents of 09b_copyedit.txt>
 
-═══════════════════════════════════════════════════════════════
+\newpage
 
-                          PROOFREADING
-
-═══════════════════════════════════════════════════════════════
+# Proofreading
 
 <contents of 09a_proofread.txt>
-```
+~~~
 
-Omit the PROOFREADING block entirely if `09a_proofread.txt` is exactly `No proofreading issues were found.` — no section heading, no empty box.
+Omit the Proofreading block entirely (including its leading `\newpage`) if
+`09a_proofread.txt` is exactly `No proofreading issues were found.`
+
+**Heading promotion.** The formatter emits `## Section` for each top-level
+review section (and `## Data Editor` if the code audit ran). Assembly runs
+an anchored substitution `^## ` → `# ` on the formatter output only. Safe
+because every upstream agent uses `##` solely for top-level headers — the
+"Potential Issues" item labels are bold, not headings. The writer-mode
+files (`08b_polisher.txt`, `09b_copyedit.txt`, `09a_proofread.txt`) are
+headingless by their own agents' constraints, so each is wrapped in a
+fresh `# ...` H1 during assembly rather than promoted.
+
+**Page breaks.** `\newpage` is pandoc raw LaTeX: it is passed through to
+the `.tex` output verbatim. The four review sections therefore flow
+continuously in the PDF; each of the three writer-mode sections starts on
+its own page. In plain Markdown viewers the `\newpage` lines render as
+literal text — a minor cosmetic cost; the PDF is the reader-facing
+artifact.
 
 Write the report to `<out>`. Confirm to the user:
 - the report path (`./peer-review-report.md`),
@@ -569,11 +873,8 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/render-pdf.sh <out>
 
 The helper runs a three-step conversion:
 
-1. `pandoc <out> -s -o ./peer-review-report.tex --pdf-engine=xelatex` — build a standalone LaTeX version from the Markdown report. The script:
-   - First pre-processes the `.md` via `sed` (under an explicit `LC_ALL=en_US.UTF-8` locale) to convert any line of 3+ `═` characters into Markdown HR `---`, so the banner boxes render as proper `\hrulefill`-style horizontal rules in the PDF.
-   - Passes `-V header-includes='\usepackage{amsmath,amssymb,amsthm,mathtools}'` so every math package needed by reviewer output (including `\mathbb{R}`, `\begin{pmatrix}`, `\overset{}`, and theorem environments) is guaranteed to load regardless of pandoc's auto-detection.
-   - Passes `-V geometry:margin=1in` and `-V fontsize=11pt` for professional document layout.
-2. `xelatex -interaction=nonstopmode peer-review-report.tex` — compile to `./peer-review-report.pdf`. xelatex is required (not pdflatex) because the reviewer output may include Unicode characters (author diacritics, em-dashes, the occasional rendered math symbol) that `pdflatex` cannot handle natively.
+1. `pandoc <out> -s -o ./peer-review-report.tex --pdf-engine=xelatex` — build a standalone LaTeX version from the Markdown report. Every rendering option (title page, TOC, geometry, font size, math-package preamble) is carried in the `.md`'s YAML frontmatter, so pandoc is invoked with no per-option `-V` flags.
+2. `xelatex -interaction=nonstopmode peer-review-report.tex` runs **twice** — the first pass writes `.aux`/`.toc`, the second pass reads them so the TOC page numbers resolve correctly. xelatex is required (not pdflatex) because the reviewer output may include Unicode characters (author diacritics, em-dashes, the occasional rendered math symbol) that `pdflatex` cannot handle natively.
 3. `rm -f` on every LaTeX intermediate (`.tex`, `.aux`, `.log`, `.out`, `.toc`, `.synctex.gz`, `.fdb_latexmk`, `.fls`, `.nav`, `.snm`, `.vrb`, `.bbl`, `.blg`, `.bcf`, `.run.xml`) so only `./peer-review-report.md` and `./peer-review-report.pdf` remain in the user's cwd.
 
 ### Math preservation
@@ -581,8 +882,8 @@ The helper runs a three-step conversion:
 The pipeline is designed to preserve every inline LaTeX math block (`$...$`) from the Markdown source verbatim into the PDF. Flow:
 
 - **Source** — the formatter agent (STEP 8.2) enforces inline-only `$...$` math and escaped currency (`US\$50`) per `prompts/output-format.md`. By the time STEP 10 writes the `.md`, every equation should be a well-formed `$...$` block.
-- **Sed preprocessing** — only matches whole-line `═{3,}` patterns (anchored with `^` and `$`). It cannot match inside a line of prose, so it cannot touch the content between any `$...$` delimiters.
 - **Pandoc's `tex_math_dollars` extension** (on by default in `-f markdown`) reads `$...$` as inline math and passes the content through verbatim into the LaTeX output (as `$...$` or `\(...\)`). Escaped `\$` (currency) is read as literal and emitted as `\$` — never misinterpreted as a math delimiter.
+- **`\newpage` page-break markers** inserted in STEP 10 are pandoc raw LaTeX; they pass through untouched, adjacent prose and math around them are unaffected.
 - **xelatex + amsmath + amssymb** — handles Greek letters (`\alpha`, `\beta`), operators (`\sum`, `\frac`, `\sqrt`), subscripts/superscripts, mathbb (`\mathbb{R}`), matrices (`\begin{pmatrix}...\end{pmatrix}`), hat accents (`\hat{}`), and all standard academic math. Unicode author names and diacritics are handled by fontspec + Latin Modern.
 
 If a reviewer agent ever emits a math construct not covered by amsmath + amssymb + mathtools (extremely rare — e.g., commutative-diagram packages), the `.tex` intermediate is preserved on compile failure so the user can add the needed package and re-run `xelatex` manually.
@@ -623,7 +924,10 @@ Every stage writes its output to a `./peer-review-output/<slug>/<stage>.txt` fil
 
 The same rule applies to `paper_text.txt` (produced at STEP 1a) and the run `README.md` (rewritten at STEP 1d).
 
-To **re-run a single stage**, delete its file (and any downstream files) and re-invoke `/peer-review` with the same PDF (and pick the same options when re-prompted, or just accept the same defaults).
+**Two correctness rules** (full details in STEP 0f):
+
+1. **Options-driven invalidation.** The orchestrator persists the current run's options to `<work_dir>/options.json` at STEP 0e. On every re-invocation it diffs against the cached `options.json`, and for each changed key it deletes the affected stage files (per the option-impact map at 0f) plus everything downstream (per the dependency graph). This is what stops a re-run with `--force-math-audit` from silently re-using the base-run summarizer output.
+2. **Manual-deletion cascade.** If the user manually deletes a stage file to force a re-run, the orchestrator detects the missing file at 0f and unlinks every downstream file in the dependency graph before continuing. The user only ever needs to delete the stage they actually want to re-run.
 
 ## Why so many agents?
 
@@ -648,7 +952,7 @@ Optional **Writer Mode** (Revision Strategist + Editor Polisher + Paper Proofrea
 - With deep math audit: +4 agents (Re-Deriver, Proofreader, Auditor, Verifier).
 - With code audit: +5 agents (and `Bash` access for the code hunters).
 - Writer mode adds Revision Strategist, Editor Polisher, Paper Proofreader, and Copyeditor.
-- The Red Team agents, the Reviewer, and the deep math/code chains use `model: opus` because they are the highest-leverage reasoning steps. Compilers, the Collector, the Math Page Identifier, the Editor Polisher, and the Paper Proofreader use `model: sonnet`. Adjust in the agent files if you need to trade quality for cost.
+- 26 agents use `model: opus` (Red Team auditors, the Reviewer, the deep math/code chains, the verifiers, the Blue Team, the Assessor, the Dossier Builder, the writer-mode pipeline). 9 agents use `model: sonnet`: `collector`, `contributions-extractor`, `editor-polisher`, `legal-sanitizer`, `math-page-identifier`, `metadata-extractor`, `paper-proofreader`, `red-team-summarizer`, `code-list-compiler` — mechanical aggregation, metadata extraction, and surface-level polish tasks where Opus reasoning depth is not needed. Adjust in the agent files if you need to trade quality for cost.
 
 ## Manually invoking a single stage
 
@@ -671,7 +975,7 @@ This is useful for iterating on a single agent's prompt or producing a quick fou
 ## Files
 
 - All agents live in `${CLAUDE_PLUGIN_ROOT}/agents/*.md`.
-- Shared prompt fragments (output format, voice, hallucination guards, issue types, page reference) live in `${CLAUDE_PLUGIN_ROOT}/prompts/`.
+- Shared prompt fragments (output format, voice, hallucination guards, common directives, issue types, page reference) live in `${CLAUDE_PLUGIN_ROOT}/prompts/`.
 - The PDF text-extraction helper is at `${CLAUDE_PLUGIN_ROOT}/scripts/extract-pdf-text.py`. It is called once per run at STEP 1a to produce `<work_dir>/paper_text.txt`, which every PDF-reading agent uses as the primary source for text-scanning (see the "Paper text dump" section).
 
 When you're done, the user has a self-contained `peer-review-report.md` they can read.

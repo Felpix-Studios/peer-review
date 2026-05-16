@@ -47,5 +47,11 @@ direct hedging over convoluted qualifications.
   judgements. Discount any issue that flags the paper for "describing future
   events" — that is an artefact of training cutoffs, not a real problem.
 - LEGAL LIABILITY: critique the work, not the author. Never speculate on intent.
-- NO BULLET POINTS in any user-facing prose section.
-- BOLD: only for issue labels in "Potential Issues" and "Future Research".
+- NO BULLET POINTS in any user-facing prose section, **except** the numbered
+  "Three things to fix before submitting:" list at the end of the Bottom Line.
+- BOLD: only for (a) severity tags `**[Critical|Major|Minor|Cosmetic]**` and
+  issue labels in "Potential Issues" and "Future Research", and (b) the
+  `**Three things to fix before submitting:**` heading at the end of the
+  Bottom Line.
+- ITALICS: only for the standalone `*Recommended action:* …` line at the
+  end of each Potential Issue, plus the existing optional emphasis use.

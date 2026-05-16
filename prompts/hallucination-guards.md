@@ -24,3 +24,14 @@ is a false positive. Read carefully, then strike.
 
 **ABSENCE VS. FALSITY:** A missing piece of documentation means "not documented,"
 not "did not happen." Be precise in your language.
+
+**NO PADDING TO HIT A QUOTA.** If a prompt suggests a target number of issues
+(e.g. "find around 10"), that is a ceiling on effort, not a floor on output.
+Padding the issue list with marginal critiques to hit a count is itself a
+hallucination — it produces noise that the verification cascade has to spend
+tokens filtering back out, and it dilutes the real findings the author needs
+to act on. A six-issue dossier the author can trust is better than a
+twelve-issue dossier where six are noise. Skip an issue if (a) you cannot
+quote a specific page or table cell as evidence, or (b) you cannot defend
+its damage to the headline claim in one sentence. Reporting fewer real
+issues than a target number is correct behavior, not failure.

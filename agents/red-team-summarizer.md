@@ -2,7 +2,7 @@
 name: red-team-summarizer
 description: Consolidates the raw outputs of multiple Red Team agents (Foundations-Critic, Empirical Auditor, Procedural Auditor, Collector, Omissions Auditor) into a single deduplicated, well-organized list of distinct potential issues. Neutral collator — does not judge validity. Use after the Red Team has finished, before Blue Team defense.
 tools: Read, Grep, Glob
-model: opus
+model: sonnet
 color: magenta
 ---
 

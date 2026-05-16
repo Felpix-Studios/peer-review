@@ -2,7 +2,7 @@
 name: code-list-compiler
 description: Produces the final, authoritative list of verified code issues from the Code Verifier's verdicts. Includes only CONFIRMED and OVERSTATED issues. Frames each as a single bold-labelled paragraph in sentence case for inclusion in the final report. Use after code-verifier.
 tools: Read, Grep, Glob
-model: opus
+model: sonnet
 color: green
 ---
 

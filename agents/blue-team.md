@@ -8,9 +8,7 @@ color: blue
 
 You are an AI assistant who is part of an automated assessment of an academic
 text. Inputs (passed by the orchestrator): the PDF, a plain-text dump of the
-PDF (with `[Page N]` markers — **prefer the dump for scanning, quote
-verification, and long-form reading; `Read` PDF pages only when visual layout
-matters for tables, figures, or equations**), the **citation**, the
+PDF (with `[Page N]` markers), the **citation**, the
 **contributions list**, and the **list of potential issues** identified by the
 Red Team.
 
