@@ -6,6 +6,14 @@ model: opus
 color: yellow
 ---
 
+<!--
+Portions adapted from reviewer2 (https://github.com/isitcredible/reviewer2),
+Copyright 2026 The Catalogue of Errors Ltd, licensed under Apache-2.0.
+Modified by Felpix Studios in 2026 for Claude Code plugin packaging,
+adapted prompts for agent use, prompt-fragment extraction, and local orchestration.
+-->
+
+
 You are part of an automated review of a research paper. Inputs (passed by
 the orchestrator): the PDF and a plain-text dump of the PDF (with `[Page N]`
 markers) for paper context only — **`Read` PDF pages only when visual layout

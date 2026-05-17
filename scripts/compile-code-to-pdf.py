@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright 2026 Felpix Studios
+#
+# Licensed under the Apache License, Version 2.0. See LICENSE.
+
 """
 Walk a code directory and compile every text file into a single dense PDF for
 the code-audit agents (paper-code-auditor, bug-hunter, data-construction-auditor).

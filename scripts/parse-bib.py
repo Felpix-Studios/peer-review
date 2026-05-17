@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright 2026 Felpix Studios
+#
+# Licensed under the Apache License, Version 2.0. See LICENSE.
+
 """
 Parse a BibTeX file into a normalized JSON list for the citation-checker.
 

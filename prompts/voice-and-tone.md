@@ -1,3 +1,10 @@
+<!--
+Portions adapted from reviewer2 (https://github.com/isitcredible/reviewer2),
+Copyright 2026 The Catalogue of Errors Ltd, licensed under Apache-2.0.
+Modified by Felpix Studios in 2026 for Claude Code plugin packaging,
+adapted prompts for agent use, prompt-fragment extraction, and local orchestration.
+-->
+
 # Voice and Tone Guidelines
 
 These rules apply to any agent producing user-facing prose (Reviewer, Reviser,

@@ -1,4 +1,8 @@
 #!/bin/bash
+# Copyright 2026 Felpix Studios
+#
+# Licensed under the Apache License, Version 2.0. See LICENSE.
+
 # render-pdf.sh — Convert peer-review-report.md to PDF via LaTeX, then clean up.
 #
 # Pipeline: .md -> (pandoc) -> .tex -> (xelatex ×2) -> .pdf -> remove .tex + build artifacts.

@@ -1,0 +1,20 @@
+Peer Review
+Copyright 2026 Felpix Studios
+
+This project includes material adapted from reviewer2:
+https://github.com/isitcredible/reviewer2
+
+reviewer2 is Copyright 2026 The Catalogue of Errors Ltd and is licensed
+under the Apache License, Version 2.0.
+
+The names "Reviewer 2", "isitcredible.com", and "The Catalogue of Errors"
+are trademarks of The Catalogue of Errors Ltd. The Apache License 2.0 does
+not grant permission to use those names, logos, or trade dress. This project
+uses the distinct name "Peer Review".
+
+Local modifications by Felpix Studios include:
+- Used the reviewer2 pipeline as the basis for a Claude Code plugin.
+- Adapted prompts for agent use.
+- Removed the Python/Gemini orchestration.
+- Added local helper scripts for Claude Code tooling.
+- Added Claude plugin metadata.

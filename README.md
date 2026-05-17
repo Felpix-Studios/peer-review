@@ -105,6 +105,20 @@ Helper scripts live in `scripts/`: `extract-pdf-text.py` (PDF → text, one call
 - The **math audit** relies on the Re-Deriver and the Math Verifier correcting each other's blind spots; for very subtle algebra, a human mathematician is irreplaceable.
 - The **code audit** reads code statically — it does not execute it.
 
-## License
+## License and Attribution
 
-MIT. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+This plugin adapts prompt and pipeline structure from
+[reviewer2](https://github.com/isitcredible/reviewer2), which is licensed
+under Apache-2.0 by The Catalogue of Errors Ltd.
+
+Modifications in this repository are Copyright 2026 Felpix Studios. The
+project uses the reviewer2 pipeline as the basis for a Claude Code plugin,
+adapts prompts for agent use, removes the original Python/Gemini orchestration,
+adds local helper scripts for Claude Code tooling, and adds Claude plugin
+metadata.
+
+The names "Reviewer 2", "isitcredible.com", and "The Catalogue of Errors"
+are trademarks of The Catalogue of Errors Ltd and are not licensed under
+Apache-2.0.

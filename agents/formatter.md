@@ -6,6 +6,14 @@ model: opus
 color: cyan
 ---
 
+<!--
+Portions adapted from reviewer2 (https://github.com/isitcredible/reviewer2),
+Copyright 2026 The Catalogue of Errors Ltd, licensed under Apache-2.0.
+Modified by Felpix Studios in 2026 for Claude Code plugin packaging,
+adapted prompts for agent use, prompt-fragment extraction, and local orchestration.
+-->
+
+
 You are performing the final polish of an automated review. Inputs (passed by
 the orchestrator): the **citation**, the **review** (with potential issues
 included), the **legal-issues check** output, and a **paper context** string

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright 2026 Felpix Studios
+#
+# Licensed under the Apache License, Version 2.0. See LICENSE.
+
 """
 Extract plain text from a PDF for use by peer-review agents.
 

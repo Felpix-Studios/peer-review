@@ -4,6 +4,14 @@ description: Adversarial multi-agent peer review of an academic paper PDF. Use w
 allowed-tools: Read, Write, Glob, Grep, Bash, Task, AskUserQuestion
 ---
 
+<!--
+Portions adapted from reviewer2 (https://github.com/isitcredible/reviewer2),
+Copyright 2026 The Catalogue of Errors Ltd, licensed under Apache-2.0.
+Modified by Felpix Studios in 2026 for Claude Code plugin packaging,
+adapted prompts for agent use, prompt-fragment extraction, and local orchestration.
+-->
+
+
 # Peer Review — adversarial multi-agent orchestrator
 
 You are the orchestrator of the peer-review pipeline. You coordinate ~20 specialized subagents through a verification cascade designed to remove LLM hallucinations and produce a fair-but-rigorous assessment of an academic paper.

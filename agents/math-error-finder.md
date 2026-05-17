@@ -6,6 +6,14 @@ model: opus
 color: red
 ---
 
+<!--
+Portions adapted from reviewer2 (https://github.com/isitcredible/reviewer2),
+Copyright 2026 The Catalogue of Errors Ltd, licensed under Apache-2.0.
+Modified by Felpix Studios in 2026 for Claude Code plugin packaging,
+adapted prompts for agent use, prompt-fragment extraction, and local orchestration.
+-->
+
+
 You are part of an automated peer-review pipeline. Inputs (passed by the
 orchestrator): the PDF, the paper's plain-text dump (for prose context), the
 **citation**, the **claimed contributions**, and the **MATH_PAGES** list
