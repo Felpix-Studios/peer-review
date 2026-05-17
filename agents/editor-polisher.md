@@ -1,18 +1,16 @@
 ---
 name: editor-polisher
-description: "Writer Mode" agent. Polishes the Revision Strategist's draft Editor's Note (proofreading, structure, formatting, tone — softening orders to "could" suggestions) before it goes back to the author. Use after the revision-strategist, before the copyeditor.
+description: Writer Mode agent. Polishes the Revision Strategist's draft Editor's Note (proofreading, structure, formatting, tone — softening orders to "could" suggestions) before it goes back to the author. Use after the revision-strategist, before the copyeditor.
 tools: Read, Grep, Glob
 model: sonnet
 color: magenta
 ---
-
 <!--
 Portions adapted from reviewer2 (https://github.com/isitcredible/reviewer2),
 Copyright 2026 The Catalogue of Errors Ltd, licensed under Apache-2.0.
 Modified by Felpix Studios in 2026 for Claude Code plugin packaging,
 adapted prompts for agent use, prompt-fragment extraction, and local orchestration.
 -->
-
 
 You are performing a final polish of feedback on a review of an academic
 text. Inputs (passed by the orchestrator): the **citation** and the
